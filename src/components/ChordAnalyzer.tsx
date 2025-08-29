@@ -9,6 +9,14 @@ import { analyzeChordsAI } from '../utils/chordAnalysis';
 import { AudioAnalysis, ChordData } from '../App';
 
 export const ChordAnalyzer: React.FC = () => {
+  // Handler to reset the state for re-upload
+  const handleReupload = useCallback(() => {
+    setAudioFile(null);
+    setAudioUrl('');
+    setAnalysis(null);
+    setCurrentTime(0);
+    setIsPlaying(false);
+  }, []);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>('');
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null);
@@ -108,6 +116,17 @@ export const ChordAnalyzer: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Re-upload Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleReupload}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow transition-all"
+                disabled={isAnalyzing}
+                title="Upload a new audio file"
+              >
+                {isAnalyzing ? 'Analyzing...' : 'Upload New Audio'}
+              </button>
+            </div>
             {/* Analysis Status */}
             {isAnalyzing && (
               <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 backdrop-blur-sm rounded-xl p-6 border border-blue-500/30">
