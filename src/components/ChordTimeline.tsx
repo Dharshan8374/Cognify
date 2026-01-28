@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Music, TrendingUp, Guitar, Piano, BookOpen, Scale } from 'lucide-react';
+import { Music, TrendingUp, Guitar, Piano, BookOpen, ToggleLeft, ToggleRight } from 'lucide-react';
 import { AudioAnalysis, ChordData } from '../App';
 
 interface ChordTimelineProps {
@@ -16,6 +16,8 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'timeline' | 'guitar' | 'piano' | 'notation'>('timeline');
 
+  const prevChordIndexRef = useRef<number>(-1);
+
   // Auto-scroll to current chord
   useEffect(() => {
     if (!scrollRef.current || !isPlaying) return;
@@ -27,13 +29,24 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
       }
     );
 
-    if (currentChordIndex >= 0) {
-      const chordElement = scrollRef.current.children[currentChordIndex] as HTMLElement;
-      if (chordElement) {
-        chordElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-          inline: 'center'
+    // Only scroll if the index has changed to prevent UI freezing
+    if (currentChordIndex >= 0 && currentChordIndex !== prevChordIndexRef.current) {
+      prevChordIndexRef.current = currentChordIndex;
+
+      const container = scrollRef.current;
+      const child = container.children[currentChordIndex] as HTMLElement;
+
+      if (container && child) {
+        // Calculate center position
+        const containerWidth = container.clientWidth;
+        const childLeft = child.offsetLeft;
+        const childWidth = child.clientWidth;
+
+        const targetSubstr = childLeft - (containerWidth / 2) + (childWidth / 2);
+
+        container.scrollTo({
+          left: targetSubstr,
+          behavior: 'smooth'
         });
       }
     }
@@ -57,14 +70,14 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
       'Am': ['x', '0', '2', '2', '1', '0'],
       'G7': ['3', '2', '0', '0', '0', '1'],
     };
-    
+
     return diagrams[chord] || ['x', 'x', 'x', 'x', 'x', 'x'];
   };
 
   const getPianoKeys = (chord: string): { white: string[], black: string[], pressed: string[] } => {
     const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
     const blackKeys = ['C#', 'D#', '', 'F#', 'G#', 'A#', ''];
-    
+
     // Piano chord mappings
     const pianoChords: { [key: string]: string[] } = {
       'C': ['C', 'E', 'G'],
@@ -77,44 +90,9 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
       'C7': ['C', 'E', 'G', 'Bb'],
       'Fmaj7': ['F', 'A', 'C', 'E'],
     };
-    
+
     const pressed = pianoChords[chord] || [];
     return { white: whiteKeys, black: blackKeys, pressed };
-  };
-
-  const getChordScale = (chord: string): { scale: string[], intervals: string[] } => {
-    const scales: { [key: string]: { scale: string[], intervals: string[] } } = {
-      'C': { 
-        scale: ['C', 'D', 'E', 'F', 'G', 'A', 'B'], 
-        intervals: ['1', '2', '3', '4', '5', '6', '7'] 
-      },
-      'Dm': { 
-        scale: ['D', 'E', 'F', 'G', 'A', 'Bb', 'C'], 
-        intervals: ['1', '2', 'b3', '4', '5', 'b6', 'b7'] 
-      },
-      'Em': { 
-        scale: ['E', 'F#', 'G', 'A', 'B', 'C', 'D'], 
-        intervals: ['1', '2', 'b3', '4', '5', 'b6', 'b7'] 
-      },
-      'F': { 
-        scale: ['F', 'G', 'A', 'Bb', 'C', 'D', 'E'], 
-        intervals: ['1', '2', '3', '4', '5', '6', '7'] 
-      },
-      'G': { 
-        scale: ['G', 'A', 'B', 'C', 'D', 'E', 'F#'], 
-        intervals: ['1', '2', '3', '4', '5', '6', '7'] 
-      },
-      'Am': { 
-        scale: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], 
-        intervals: ['1', '2', 'b3', '4', '5', 'b6', 'b7'] 
-      },
-      'G7': { 
-        scale: ['G', 'A', 'B', 'C', 'D', 'E', 'F'], 
-        intervals: ['1', '2', '3', '4', '5', '6', 'b7'] 
-      },
-    };
-    
-    return scales[chord] || { scale: [], intervals: [] };
   };
 
   const getNotationSVG = (chord: string): string => {
@@ -151,10 +129,12 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
         </svg>
       `,
     };
-    
+
     return notations[chord] || notations['C'];
   };
+
   const currentChord = getCurrentChord();
+  const [showSimplified, setShowSimplified] = useState(false);
 
   return (
     <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
@@ -173,47 +153,55 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
             </div>
           )}
         </div>
-        
-        <div className="flex bg-white/20 rounded-lg p-1">
+
+        <div className="flex bg-white/20 rounded-lg p-1 space-x-1">
+          <button
+            onClick={() => setShowSimplified(!showSimplified)}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center ${showSimplified
+              ? 'bg-green-500 text-white shadow-md'
+              : 'text-gray-300 hover:text-white hover:bg-white/10'
+              }`}
+            title="Hide passing notes"
+          >
+            {showSimplified ? <ToggleRight className="w-4 h-4 mr-1" /> : <ToggleLeft className="w-4 h-4 mr-1" />}
+            Simplify
+          </button>
+          <div className="w-[1px] bg-white/20 mx-1"></div>
           <button
             onClick={() => setViewMode('timeline')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'timeline' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'text-gray-300 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'timeline'
+              ? 'bg-blue-500 text-white shadow-md'
+              : 'text-gray-300 hover:text-white'
+              }`}
           >
             Timeline
           </button>
           <button
             onClick={() => setViewMode('guitar')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'guitar' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'text-gray-300 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'guitar'
+              ? 'bg-blue-500 text-white shadow-md'
+              : 'text-gray-300 hover:text-white'
+              }`}
           >
             <Guitar className="w-4 h-4 inline mr-2" />
             Guitar
           </button>
           <button
             onClick={() => setViewMode('piano')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'piano' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'text-gray-300 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'piano'
+              ? 'bg-blue-500 text-white shadow-md'
+              : 'text-gray-300 hover:text-white'
+              }`}
           >
             <Piano className="w-4 h-4 inline mr-2" />
             Piano
           </button>
           <button
             onClick={() => setViewMode('notation')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              viewMode === 'notation' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'text-gray-300 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'notation'
+              ? 'bg-blue-500 text-white shadow-md'
+              : 'text-gray-300 hover:text-white'
+              }`}
           >
             <BookOpen className="w-4 h-4 inline mr-2" />
             Notation
@@ -221,332 +209,169 @@ export const ChordTimeline: React.FC<ChordTimelineProps> = ({
         </div>
       </div>
 
-      {viewMode === 'timeline' ? (
-        <div 
-          ref={scrollRef}
-          className="flex space-x-3 overflow-x-auto pb-4 scrollbar-hide"
-          style={{ scrollBehavior: 'smooth' }}
-        >
-          {analysis.chords.map((chord, index) => {
-            const isActive = currentChord?.time === chord.time;
-            const isPast = currentTime > chord.time;
-            
-            return (
-              <div
-                key={index}
-                className={`
-                  flex-shrink-0 p-4 rounded-lg border transition-all duration-300
-                  ${isActive 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-blue-400 scale-110 shadow-lg' 
-                    : isPast
+      <div
+        ref={scrollRef}
+        className="flex space-x-3 overflow-x-auto pb-4 scrollbar-hide"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {analysis.chords.map((chord, index) => {
+          const isActive = currentChord?.time === chord.time;
+          const isPast = currentTime > chord.time;
+          const chordDiagram = getChordDiagram(chord.chord);
+          const pianoKeys = getPianoKeys(chord.chord);
+
+          return (
+            <div
+              key={index}
+              className={`
+                flex-shrink-0 p-4 rounded-lg border transition-all duration-300
+                ${isActive
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 border-blue-400 scale-110 shadow-lg'
+                  : isPast
                     ? 'bg-white/20 border-white/30'
                     : 'bg-white/10 border-white/20 hover:bg-white/20'
-                  }
-                `}
-              >
-                <div className="text-center">
-                  <div className={`text-2xl font-bold mb-1 ${isActive ? 'text-white' : 'text-white'}`}>
-                    {chord.chord}
-                  </div>
-                  <div className={`text-xs mb-2 ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
-                    Bar {chord.bar}, Beat {chord.beat}
-                  </div>
-                  <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
-                    {Math.round(chord.time * 10) / 10}s
-                  </div>
-                  <div className="mt-2">
-                    <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
-                      {Math.round(chord.confidence * 100)}% confidence
-                    </div>
-                    <div className={`w-full bg-white/20 rounded-full h-1 mt-1`}>
-                      <div
-                        className={`h-1 rounded-full ${isActive ? 'bg-white' : 'bg-green-400'}`}
-                        style={{ width: `${chord.confidence * 100}%` }}
-                      />
-                    </div>
-                  </div>
+                }
+              `}
+              style={{ minWidth: '200px' }}
+            >
+              <div className="text-center">
+                <div className={`text-2xl font-bold mb-1 ${isActive ? 'text-white' : 'text-white'}`}>
+                  {chord.chord}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : viewMode === 'guitar' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from(new Set(analysis.chords.map(c => c.chord))).map((chord) => {
-            const diagram = getChordDiagram(chord);
-            const isCurrentChord = currentChord?.chord === chord;
-            
-            return (
-              <div
-                key={chord}
-                className={`
-                  p-6 rounded-lg border transition-all
-                  ${isCurrentChord 
-                    ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-400 shadow-lg' 
-                    : 'bg-white/10 border-white/20 hover:bg-white/20'
-                  }
-                `}
-              >
-                <h3 className={`text-2xl font-bold text-center mb-4 ${isCurrentChord ? 'text-blue-200' : 'text-white'}`}>
-                  {chord}
-                </h3>
-                
-                {/* Guitar Fretboard */}
-                <div className="bg-amber-100/90 rounded-lg p-4">
-                  <div className="grid grid-cols-6 gap-1 mb-2">
-                    {['E', 'A', 'D', 'G', 'B', 'e'].map((string, i) => (
-                      <div key={i} className="text-center text-xs text-gray-600 font-medium">
-                        {string}
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="relative">
-                    {/* Frets */}
-                    {[0, 1, 2, 3].map((fret) => (
-                      <div key={fret} className="grid grid-cols-6 gap-1 border-b border-gray-400 pb-2 mb-2">
-                        {diagram.map((fretValue, stringIndex) => {
-                          const isPressed = fretValue !== 'x' && parseInt(fretValue) === fret;
-                          const isMuted = fretValue === 'x' && fret === 0;
-                          
+                <div className={`text-xs mb-2 ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                  Bar {chord.bar}, Beat {chord.beat}
+                </div>
+
+                {/* View Specific Content */}
+                <div className="flex justify-center my-2">
+                  {viewMode === 'timeline' && analysis.melody && (
+                    <div className="flex flex-col space-y-1 w-full max-h-[120px] overflow-y-auto custom-scrollbar">
+                      {analysis.melody
+                        .filter(m => m.time >= chord.time && (!analysis.chords[index + 1] || m.time < analysis.chords[index + 1].time))
+                        .filter(m => !showSimplified || m.role === 'Chord Tone') // Simplify logic
+                        .filter((m, i, arr) => i === 0 || m.note !== arr[i - 1].note) // Deduplicate
+                        .map((note, idx) => {
+                          let colorClass = "text-gray-400";
+                          let bgClass = "bg-gray-700/50";
+                          let interval = "";
+
+                          if (note.role === "Chord Tone") {
+                            colorClass = "text-green-300";
+                            bgClass = "bg-green-500/20 border-green-500/30";
+                            interval = "Target";
+                          } else if (note.role === "Scale Note") {
+                            colorClass = "text-blue-300";
+                            bgClass = "bg-blue-500/20 border-blue-500/30";
+                            interval = "Motion";
+                          } else { // Passing Note
+                            colorClass = "text-orange-300";
+                            bgClass = "bg-orange-500/20 border-orange-500/30";
+                            interval = "Tension";
+                          }
+
                           return (
-                            <div
-                              key={stringIndex}
-                              className={`
-                                w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                ${isPressed 
-                                  ? 'bg-blue-500 text-white' 
-                                  : isMuted 
-                                  ? 'text-red-500' 
-                                  : 'bg-gray-200'
-                                }
-                              `}
-                            >
-                              {fret === 0 && fretValue === 'x' ? '×' : 
-                               fret === 0 && fretValue === '0' ? '○' :
-                               isPressed ? fret : ''}
+                            <div key={idx} className={`text-[10px] px-2 py-0.5 rounded border ${bgClass} ${colorClass} whitespace-nowrap flex justify-between`}>
+                              <span>{note.note}</span>
+                              <span className="opacity-70 text-[9px] uppercase tracking-wider ml-2">{interval}</span>
                             </div>
                           );
                         })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : viewMode === 'piano' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from(new Set(analysis.chords.map(c => c.chord))).map((chord) => {
-            const { white, black, pressed } = getPianoKeys(chord);
-            const isCurrentChord = currentChord?.chord === chord;
-            const chordScale = getChordScale(chord);
-            
-            return (
-              <div
-                key={chord}
-                className={`
-                  p-6 rounded-lg border transition-all
-                  ${isCurrentChord 
-                    ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-400 shadow-lg' 
-                    : 'bg-white/10 border-white/20 hover:bg-white/20'
-                  }
-                `}
-              >
-                <h3 className={`text-2xl font-bold text-center mb-4 ${isCurrentChord ? 'text-blue-200' : 'text-white'}`}>
-                  {chord}
-                </h3>
-                
-                {/* Piano Keyboard */}
-                <div className="bg-white rounded-lg p-4 mb-4">
-                  <div className="relative h-24">
-                    {/* White Keys */}
-                    <div className="flex">
-                      {white.map((key, i) => (
-                        <div
-                          key={i}
-                          className={`
-                            flex-1 h-20 border border-gray-300 flex items-end justify-center pb-2 text-xs font-medium
-                            ${pressed.includes(key) 
-                              ? 'bg-blue-500 text-white' 
-                              : 'bg-white text-gray-700 hover:bg-gray-50'
-                            }
-                          `}
-                        >
-                          {key}
-                        </div>
-                      ))}
                     </div>
-                    
-                    {/* Black Keys */}
-                    <div className="absolute top-0 flex">
-                      {black.map((key, i) => {
-                        if (!key) return <div key={i} className="w-8"></div>;
-                        return (
-                          <div
-                            key={i}
-                            className={`
-                              w-6 h-12 -ml-3 mr-3 flex items-end justify-center pb-1 text-xs font-medium
-                              ${pressed.includes(key) 
-                                ? 'bg-blue-600 text-white' 
-                                : 'bg-gray-800 text-white hover:bg-gray-700'
-                              }
-                            `}
-                            style={{ marginLeft: i === 0 ? '1.5rem' : '-0.75rem' }}
-                          >
-                            {key}
+                  )}
+
+                  {viewMode === 'guitar' && (
+                    <div className="bg-amber-100/90 rounded p-2 text-black w-32 relative">
+                      {/* Melody Highlight Overlay (Simplistic) */}
+                      {analysis.melody && analysis.melody
+                        .filter(m => m.time >= chord.time && (!analysis.chords[index + 1] || m.time < analysis.chords[index + 1].time))
+                        .filter(m => isActive && Math.abs(m.time - currentTime) < 0.5) // Only current note
+                        .slice(0, 1)
+                        .map((m, mi) => (
+                          <div key={mi} className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full z-20 shadow-sm animate-bounce">
+                            {m.note}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Scale Information */}
-                <div className="bg-gray-800/50 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
-                    <Scale className="w-4 h-4 mr-2" />
-                    Related Scale
-                  </h4>
-                  <div className="grid grid-cols-7 gap-1 text-xs">
-                    {chordScale.scale.map((note, i) => (
-                      <div key={i} className="text-center">
-                        <div className={`
-                          p-1 rounded mb-1 font-medium
-                          ${pressed.includes(note) 
-                            ? 'bg-blue-500 text-white' 
-                            : 'bg-gray-700 text-gray-300'
-                          }
-                        `}>
-                          {note}
-                        </div>
-                        <div className="text-gray-400">
-                          {chordScale.intervals[i]}
-                        </div>
+                        ))
+                      }
+
+                      <div className="grid grid-cols-6 gap-0.5 text-[8px] mb-1 font-bold">
+                        {['E', 'A', 'D', 'G', 'B', 'e'].map(s => <div key={s}>{s}</div>)}
                       </div>
-                    ))}
+                      <div className="relative space-y-1">
+                        {[0, 1, 2, 3].map((fret) => (
+                          <div key={fret} className="grid grid-cols-6 gap-0.5 border-b border-gray-400 pb-1">
+                            {chordDiagram.map((fretValue, sIdx) => {
+                              const isPressed = fretValue !== 'x' && parseInt(fretValue) === fret;
+                              return (
+                                <div key={sIdx} className={`w-3 h-3 rounded-full mx-auto ${isPressed ? 'bg-blue-600' : ''}`}></div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewMode === 'piano' && (
+                    <div className="bg-white rounded p-2 w-32 relative">
+                      {/* Melody Highlight Overlay */}
+                      {analysis.melody && analysis.melody
+                        .filter(m => m.time >= chord.time && (!analysis.chords[index + 1] || m.time < analysis.chords[index + 1].time))
+                        .filter(m => isActive && Math.abs(m.time - currentTime) < 0.5) // Only current note
+                        .slice(0, 1)
+                        .map((m, mi) => {
+                          // Find key index for visualization (approximate)
+                          // Just show a badge for now as mapping is complex
+                          return (
+                            <div key={mi} className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full z-20 shadow-sm animate-bounce">
+                              {m.note}
+                            </div>
+                          )
+                        })
+                      }
+
+                      <div className="flex justify-between h-12 relative">
+                        {/* Simplified Piano - White Keys */}
+                        {pianoKeys.white.map((key, kIdx) => (
+                          <div key={kIdx} className={`flex-1 border border-gray-300 ${pianoKeys.pressed.includes(key) ? 'bg-blue-500' : 'bg-white'}`}></div>
+                        ))}
+                        {/* Black Keys Mockup - simplified for small view */}
+                        {pianoKeys.black.map((key, kIdx) => {
+                          if (!key) return <div key={`spacer-${kIdx}`} className="absolute" style={{ width: 0 }} />;
+                          return (
+                            <div key={kIdx}
+                              className={`absolute w-2 h-8 bg-black z-10 ${pianoKeys.pressed.includes(key) ? 'bg-blue-600' : ''}`}
+                              style={{ left: `${(kIdx + 1) * 14.28 - 7}%` }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewMode === 'notation' && (
+                    <div dangerouslySetInnerHTML={{ __html: getNotationSVG(chord.chord).replace('width="100%"', 'width="150"').replace('height="100%"', 'height="80"') }} />
+                  )}
+                </div>
+
+                <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                  {Math.round(chord.time * 10) / 10}s
+                </div>
+                <div className="mt-2">
+                  <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                    {Math.round(chord.confidence * 100)}% confidence
+                  </div>
+                  <div className={`w-full bg-white/20 rounded-full h-1 mt-1`}>
+                    <div
+                      className={`h-1 rounded-full ${isActive ? 'bg-white' : 'bg-green-400'}`}
+                      style={{ width: `${chord.confidence * 100}%` }}
+                    />
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {Array.from(new Set(analysis.chords.map(c => c.chord))).map((chord) => {
-            const isCurrentChord = currentChord?.chord === chord;
-            const chordScale = getChordScale(chord);
-            
-            return (
-              <div
-                key={chord}
-                className={`
-                  p-6 rounded-lg border transition-all
-                  ${isCurrentChord 
-                    ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-400 shadow-lg' 
-                    : 'bg-white/10 border-white/20 hover:bg-white/20'
-                  }
-                `}
-              >
-                <h3 className={`text-2xl font-bold text-center mb-4 ${isCurrentChord ? 'text-blue-200' : 'text-white'}`}>
-                  {chord}
-                </h3>
-                
-                {/* Musical Notation */}
-                <div className="bg-white rounded-lg p-4 mb-4">
-                  <div className="relative">
-                    {/* Staff Lines */}
-                    <svg viewBox="0 0 300 120" className="w-full h-24">
-                      <g stroke="#374151" strokeWidth="1" fill="none">
-                        <line x1="20" y1="20" x2="280" y2="20"/>
-                        <line x1="20" y1="35" x2="280" y2="35"/>
-                        <line x1="20" y1="50" x2="280" y2="50"/>
-                        <line x1="20" y1="65" x2="280" y2="65"/>
-                        <line x1="20" y1="80" x2="280" y2="80"/>
-                      </g>
-                      
-                      {/* Treble Clef */}
-                      <text x="25" y="55" fill="#374151" fontSize="24" fontFamily="serif">𝄞</text>
-                      
-                      {/* Notes based on chord */}
-                      {chord === 'C' && (
-                        <>
-                          <circle cx="80" cy="80" r="4" fill="#3B82F6"/>
-                          <circle cx="110" cy="65" r="4" fill="#3B82F6"/>
-                          <circle cx="140" cy="50" r="4" fill="#3B82F6"/>
-                        </>
-                      )}
-                      {chord === 'Dm' && (
-                        <>
-                          <circle cx="80" cy="72" r="4" fill="#8B5CF6"/>
-                          <circle cx="110" cy="58" r="4" fill="#8B5CF6"/>
-                          <circle cx="140" cy="43" r="4" fill="#8B5CF6"/>
-                        </>
-                      )}
-                      {chord === 'Em' && (
-                        <>
-                          <circle cx="80" cy="65" r="4" fill="#10B981"/>
-                          <circle cx="110" cy="50" r="4" fill="#10B981"/>
-                          <circle cx="140" cy="35" r="4" fill="#10B981"/>
-                        </>
-                      )}
-                      {chord === 'F' && (
-                        <>
-                          <circle cx="80" cy="58" r="4" fill="#F59E0B"/>
-                          <circle cx="110" cy="43" r="4" fill="#F59E0B"/>
-                          <circle cx="140" cy="80" r="4" fill="#F59E0B"/>
-                        </>
-                      )}
-                      {chord === 'G' && (
-                        <>
-                          <circle cx="80" cy="50" r="4" fill="#EF4444"/>
-                          <circle cx="110" cy="35" r="4" fill="#EF4444"/>
-                          <circle cx="140" cy="72" r="4" fill="#EF4444"/>
-                        </>
-                      )}
-                      {chord === 'Am' && (
-                        <>
-                          <circle cx="80" cy="43" r="4" fill="#8B5CF6"/>
-                          <circle cx="110" cy="80" r="4" fill="#8B5CF6"/>
-                          <circle cx="140" cy="65" r="4" fill="#8B5CF6"/>
-                        </>
-                      )}
-                      
-                      <text x="200" y="100" fill="#374151" fontSize="16" fontFamily="serif">{chord}</text>
-                    </svg>
-                  </div>
-                </div>
-                
-                {/* Chord Analysis */}
-                <div className="space-y-3">
-                  <div className="bg-gray-800/50 rounded-lg p-3">
-                    <h4 className="text-sm font-semibold text-gray-300 mb-2">Chord Tones</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {getPianoKeys(chord).pressed.map((note, i) => (
-                        <span key={i} className="bg-blue-500 text-white px-2 py-1 rounded text-sm font-medium">
-                          {note}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gray-800/50 rounded-lg p-3">
-                    <h4 className="text-sm font-semibold text-gray-300 mb-2">Scale Degrees</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {chordScale.intervals.slice(0, getPianoKeys(chord).pressed.length).map((interval, i) => (
-                        <span key={i} className="bg-purple-500 text-white px-2 py-1 rounded text-sm font-medium">
-                          {interval}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

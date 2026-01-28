@@ -5,6 +5,7 @@ import { LandingPage } from './components/LandingPage';
 import { SignIn } from './components/SignIn';
 import { SignUp } from './components/SignUp';
 import { ChordAnalyzer } from './components/ChordAnalyzer';
+import { PracticeMode } from './components/PracticeMode';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicRoute } from './components/PublicRoute';
 
@@ -16,12 +17,22 @@ export interface ChordData {
   bar: number;
 }
 
+export interface MelodyEvent {
+  time: number;
+  pitch: number;
+  note: string;
+  role: 'Chord Tone' | 'Scale Note' | 'Passing Note';
+}
+
 export interface AudioAnalysis {
   duration: number;
   bpm: number;
   key: string;
   timeSignature: string;
   chords: ChordData[];
+  melody: MelodyEvent[];
+  audioUrl?: string;
+  stems?: { [key: string]: string };
 }
 
 function App() {
@@ -43,39 +54,47 @@ function App() {
     <Router>
       <Routes>
         {/* Public Routes */}
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             <PublicRoute>
               <LandingPage />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/sign-in" 
+        <Route
+          path="/sign-in"
           element={
             <PublicRoute>
               <SignIn />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/sign-up" 
+        <Route
+          path="/sign-up"
           element={
             <PublicRoute>
               <SignUp />
             </PublicRoute>
-          } 
+          }
         />
 
         {/* Protected Routes */}
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <ChordAnalyzer />
             </ProtectedRoute>
-          } 
+          }
+        />
+        <Route
+          path="/practice"
+          element={
+            <ProtectedRoute>
+              <PracticeMode />
+            </ProtectedRoute>
+          }
         />
 
         {/* Redirect any unknown routes */}

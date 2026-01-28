@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Download, FileText, Music, Code, FileImage, Check } from 'lucide-react';
+import { Download, FileText, Music, Code, FileImage, Check, Mic, MicOff } from 'lucide-react';
 import { AudioAnalysis } from '../App';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ExportPanelProps {
   analysis: AudioAnalysis;
-  audioFile: File;
+  audioFile: File | null;
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile }) => {
@@ -39,6 +41,20 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile })
       description: 'Printable chord chart with measures',
       icon: FileImage,
       color: 'from-orange-500 to-red-600'
+    },
+    {
+      id: 'vocals',
+      name: 'Vocals Only',
+      description: 'Isolated vocal track (WAV)',
+      icon: Mic,
+      color: 'from-pink-500 to-rose-600'
+    },
+    {
+      id: 'instrumental',
+      name: 'Instrumental',
+      description: 'Karaoke mix (No Vocals)',
+      icon: MicOff,
+      color: 'from-indigo-500 to-blue-600'
     }
   ];
 
@@ -53,32 +69,67 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile })
       let filename: string;
       let mimeType: string;
 
+      const safeName = audioFile ? audioFile.name.replace(/\.[^/.]+$/, "") : (analysis.audioUrl ? analysis.audioUrl.split('/').pop()?.split('.')[0] : 'song');
+
       switch (formatId) {
         case 'csv':
           content = generateCSV();
-          filename = `${audioFile.name.split('.')[0]}_chords.csv`;
+          filename = `${safeName}_chords.csv`;
           mimeType = 'text/csv';
           break;
         case 'midi':
           content = generateMIDI();
-          filename = `${audioFile.name.split('.')[0]}_chords.mid`;
+          filename = `${safeName}_chords.mid`;
           mimeType = 'audio/midi';
           break;
         case 'musicxml':
           content = generateMusicXML();
-          filename = `${audioFile.name.split('.')[0]}_chords.xml`;
+          filename = `${safeName}_chords.xml`;
           mimeType = 'application/xml';
           break;
         case 'pdf':
-          content = generatePDF();
-          filename = `${audioFile.name.split('.')[0]}_leadsheet.pdf`;
-          mimeType = 'application/pdf';
-          break;
+          // PDF Logic handles its own download usually, but here we can get blob URL
+          // doc.save() triggers download directly.
+          // Let's refactor slightly to support the switch case flow.
+          // generatePDF returns blob URL directly?
+          // No, generatePDF() previously returned string content.
+          // Let's change flow: if PDF, we handle differently or return special.
+
+          const pdfUrl = generatePDF(); // Returns blob URL
+
+          const a = document.createElement('a');
+          a.href = pdfUrl;
+          a.download = `${safeName}_leadsheet.pdf`;
+          a.click();
+          setCompletedFormats(prev => new Set(prev).add(formatId));
+          return; // Exit here for PDF
+
+        case 'vocals':
+        case 'instrumental':
+          // Call backend API
+          // Ensure we have filename
+          if (!analysis.audioUrl) throw new Error("No audio URL found");
+          const originalFilename = analysis.audioUrl.split('/').pop();
+          if (!originalFilename) throw new Error("Invalid audio filename");
+
+          const res = await fetch(`http://localhost:5000/api/mix/${originalFilename}/${formatId}`);
+          if (!res.ok) throw new Error("Download failed");
+
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a2 = document.createElement('a');
+          a2.href = url;
+          a2.download = `${safeName}_${formatId}.wav`;
+          a2.click();
+          URL.revokeObjectURL(url);
+          setCompletedFormats(prev => new Set(prev).add(formatId));
+          return;
+
         default:
           throw new Error('Unknown format');
       }
 
-      // Create download
+      // Create download for Text-based
       const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -90,6 +141,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile })
       setCompletedFormats(prev => new Set(prev).add(formatId));
     } catch (error) {
       console.error('Export failed:', error);
+      alert("Export failed: " + (error as any).message);
     } finally {
       setExportingFormats(prev => {
         const newSet = new Set(prev);
@@ -108,13 +160,13 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile })
       chord.beat.toString(),
       chord.bar.toString()
     ]);
-    
+
     return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
   const generateMIDI = (): string => {
     // Mock MIDI data - in production, use a proper MIDI library
-    return `MIDI File Generated for ${audioFile.name}\nChords: ${analysis.chords.map(c => c.chord).join(', ')}`;
+    return `MIDI File Generated for ${audioFile ? audioFile.name : 'Analyzed Song'}\nChords: ${analysis.chords.map(c => c.chord).join(', ')}`;
   };
 
   const generateMusicXML = (): string => {
@@ -141,14 +193,63 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ analysis, audioFile })
   };
 
   const generatePDF = (): string => {
-    // Mock PDF content - in production, use a PDF library like jsPDF
-    return `PDF Lead Sheet for ${audioFile.name}
-Key: ${analysis.key}
-BPM: ${analysis.bpm}
-Time Signature: ${analysis.timeSignature}
+    // 1. Init Doc
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
 
-Chord Progression:
-${analysis.chords.map((chord, i) => `${i + 1}. ${chord.chord} (Bar ${chord.bar})`).join('\n')}`;
+    // 2. Header
+    doc.setFontSize(24);
+    doc.setTextColor(40, 40, 40);
+    const title = audioFile ? audioFile.name.replace(/\.[^/.]+$/, "") : 'Analyzed Song';
+    doc.text(title, pageWidth / 2, 20, { align: 'center' });
+
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Key: ${analysis.key}   |   BPM: ${analysis.bpm}   |   Signature: ${analysis.timeSignature}`, pageWidth / 2, 30, { align: 'center' });
+
+    // 3. Grid Layout using AutoTable
+    // Group chords into bars. (Assuming 4 bars per line typically, but we have sparse data)
+    // Let's create a table where each cell is a Bar.
+    // Max Bar found?
+    const maxBar = Math.max(...analysis.chords.map(c => c.bar));
+    const bars: string[] = new Array(maxBar + 1).fill('');
+
+    // Fill bars
+    analysis.chords.forEach(c => {
+      const existing = bars[c.bar];
+      bars[c.bar] = existing ? `${existing} ${c.chord}` : c.chord;
+    });
+
+    // Create rows of 4 bars
+    const rows: string[][] = [];
+    for (let i = 1; i <= maxBar; i += 4) {
+      const row = [
+        `Bar ${i}`,
+        bars[i] || '%',
+        bars[i + 1] || '%',
+        bars[i + 2] || '%',
+        bars[i + 3] || '%'
+      ];
+      rows.push(row);
+    }
+
+    autoTable(doc, {
+      head: [['#', 'Bar 1', 'Bar 2', 'Bar 3', 'Bar 4']],
+      body: rows,
+      startY: 40,
+      styles: { fontSize: 12, cellPadding: 5, halign: 'center' },
+      headStyles: { fillColor: [59, 130, 246] }, // Blue header
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 20 }, // Bar Number
+      }
+    });
+
+    // 4. Footer
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text('Generated by Cognify AI', pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+
+    return doc.output('bloburl').toString(); // We return string URL for blob
   };
 
   return (
@@ -189,8 +290,8 @@ ${analysis.chords.map((chord, i) => `${i + 1}. ${chord.chord} (Bar ${chord.bar})
                   ${isCompleted
                     ? 'bg-green-600 hover:bg-green-700 text-white'
                     : isExporting
-                    ? 'bg-gray-600 cursor-not-allowed text-gray-300'
-                    : `bg-gradient-to-r ${format.color} hover:shadow-lg text-white`
+                      ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+                      : `bg-gradient-to-r ${format.color} hover:shadow-lg text-white`
                   }
                 `}
               >
